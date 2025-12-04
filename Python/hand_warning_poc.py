@@ -38,6 +38,9 @@ def process_frame(frame):
     mask = cv2.dilate(mask, kernel, iterations=2)
     mask = cv2.medianBlur(mask, 5)
 
+    fx, fy, contour = get_hand_fingertip(mask)
+
+
 
 
 def main():
