@@ -15,6 +15,33 @@ MIN_CONTOUR_AREA = 2000
 WARNING_REL = 0.30 #Distance less than 30% of frame width
 DANGER_REL  = 0.10 #Distance less than 10% of frame width
 
+def get_hand_fingertip(mask):
+    
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    if not contours:
+        return None, None, None
+
+    # Largest contour by area (assume it's the hand)
+    largest = max(contours, key=cv2.contourArea)
+    area = cv2.contourArea(largest)
+    if area < MIN_CONTOUR_AREA:
+        return None, None, None
+
+    # Find the top-most point of the contour (smallest y)
+    # contour shape: (N, 1, 2)
+    ys = largest[:, 0, 1]
+    min_index = np.argmin(ys)
+    fx, fy = largest[min_index, 0, 0], largest[min_index, 0, 1]
+
+    return int(fx), int(fy), largest
+
+def compute_point_to_rect_distance(px, py, x1, y1, x2, y2):
+    
+    dx = max(x1 - px, 0, px - x2)
+    dy = max(y1 - py, 0, py - y2)
+    return np.sqrt(dx * dx + dy * dy)
+
 
 def process_frame(frame):
 
@@ -40,6 +67,73 @@ def process_frame(frame):
 
     fx, fy, contour = get_hand_fingertip(mask)
 
+    # Draw virtual rectangle
+    cv2.rectangle(frame, (rect_x1, rect_y1), (rect_x2, rect_y2), (255, 0, 0), 2)
+    cv2.putText(
+        frame, "VIRTUAL OBJECT", (rect_x1, rect_y1 - 10),
+        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2
+    )
+
+    state = "NO HAND"
+    dist = None
+
+    warning_thresh = WARNING_REL * w
+    danger_thresh  = DANGER_REL * w
+
+    if fx is not None and fy is not None:
+        # Draw contour and fingertip
+        cv2.drawContours(frame, [contour], -1, (0, 255, 0), 2)
+        cv2.circle(frame, (fx, fy), 7, (0, 0, 255), -1)
+        cv2.putText(
+            frame, f"Fingertip ({fx}, {fy})", (fx + 10, fy),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1
+        )
+
+        # Compute distance to rectangle
+        dist = compute_point_to_rect_distance(fx, fy, rect_x1, rect_y1, rect_x2, rect_y2)
+
+        # State machine
+        if dist <= 0.0:
+            state = "DANGER DANGER"
+        else:
+            if dist > warning_thresh:
+                state = "SAFE"
+            elif dist > danger_thresh:
+                state = "WARNING"
+            else:
+                state = "DANGER"
+
+    # Choose color based on state
+    if state == "SAFE":
+        state_color = (0, 255, 0)
+    elif state == "WARNING":
+        state_color = (0, 255, 255)
+    elif state == "DANGER":
+        state_color = (0, 0, 255)
+    else:  # NO HAND
+        state_color = (255, 255, 255)
+
+    # Overlay state text
+    cv2.putText(
+        frame, f"STATE: {state}", (20, 40),
+        cv2.FONT_HERSHEY_SIMPLEX, 1.0, state_color, 3
+    )
+
+    # Distance text (if available)
+    if dist is not None:
+        cv2.putText(
+            frame, f"Distance: {dist:.1f}px", (20, 80),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2
+        )
+
+    # Big warning for DANGER
+    if state == "DANGER":
+        cv2.putText(
+            frame, "DANGER DANGER", (int(w * 0.15), int(h * 0.5)),
+            cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 255), 4
+        )
+
+    return frame, state, dist
 
 
 

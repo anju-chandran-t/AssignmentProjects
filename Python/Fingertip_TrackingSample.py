@@ -82,7 +82,7 @@ def process_frame(frame):
     mask = cv2.inRange(hsv, LOWER_HSV, UPPER_HSV)
 
     # Morphological cleanup
-    kernel = np.ones((5, 5), np.uint8)
+    kernel = np.ones((5,5), np.uint8)
     mask = cv2.erode(mask, kernel, iterations=1)
     mask = cv2.dilate(mask, kernel, iterations=2)
     mask = cv2.medianBlur(mask, 5)
