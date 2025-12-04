@@ -1,0 +1,1 @@
+The file hand_warning_poc.py script should be run to execute fingertip tracking.
